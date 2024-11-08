@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import requests
+import re  # Import re for regular expressions
 
 # ------------------------------
 # Streamlit App Setup
@@ -45,6 +46,7 @@ def load_nodes(language, video_name):
     """
     Loads the node texts from the nodes file.
     Only applicable for English videos when causal relations are enabled.
+    Removes "Node (number): " prefix from each node text.
     """
     nodes = []
     if language == 'English' and st.session_state.get('use_causal_relations', False):
@@ -52,7 +54,9 @@ def load_nodes(language, video_name):
 
         response = requests.get(node_url)
         if response.status_code == 200:
-            nodes = response.text.strip().split('\n')
+            nodes_raw = response.text.strip().split('\n')
+            # Remove "Node (number): " prefix if present
+            nodes = [re.sub(r'^Node \d+:\s*', '', line) for line in nodes_raw]
         else:
             st.warning(f"Nodes file not found: {node_url}")
     return nodes
@@ -83,18 +87,21 @@ def generate_transcript_html(transcript_data):
         start = item.get('begin_time', '')
         end = item.get('end_time', '')
         text = item['text']
-        matched = item.get('matched', 'no').lower()
+        matched = item.get('matched', 'no').lower().strip()  # Trim whitespace
         node_id = index  # Assign node_id based on index
 
         # Determine CSS class based on 'matched' status
         matched_class = 'matched' if matched == 'yes' else 'unmatched'
 
         # Handle missing start and end times
-        data_start = f'data-start="{start}"' if start else ''
-        data_end = f'data-end="{end}"' if end else ''
+        data_start = f'data-start="{start}"' if start != '' else ''
+        data_end = f'data-end="{end}"' if end != '' else ''
+
+        # Add data-matched attribute for reliable checking in JS
+        data_matched = f'data-matched="{matched}"'
 
         transcript_html += f'''
-        <p class="sentence {matched_class}" {data_start} {data_end} data-node="{node_id}">
+        <p class="sentence {matched_class}" {data_start} {data_end} {data_matched} data-node="{node_id}">
             {text}
         </p>
         '''
@@ -192,7 +199,6 @@ def main():
             display: flex;
             flex-direction: row;
             width: 100%;
-            background-color: #0e0e0e;
             height: 600px;
             box-sizing: border-box;
         }}
@@ -207,8 +213,8 @@ def main():
             flex: 1;
             padding: 10px;
             overflow-y: auto;
-            background-color: #0e0e0e;
             box-sizing: border-box;
+            background-color: #0e0e0e;
         }}
         #videoPlayer {{
             flex: 1;
@@ -216,75 +222,93 @@ def main():
         }}
         .sentence {{
             cursor: pointer;
-            padding: 5px;
+            padding: 10px;
             color: white;
             transition: background-color 0.3s, color 0.3s;
             margin: 5px 0;
+            border-radius: 5px;
         }}
         .sentence:hover {{
-            background-color: #444;
+            background-color: #1a1a1a;
         }}
         .matched {{
             /* No additional styles for matched sentences */
         }}
         .unmatched {{
-            color: grey;
+            color: #b0b0b0;
             font-style: italic;
         }}
         .highlight {{
-            background-color: yellow;
+            background-color: #ffff66; /* Yellow */
             color: black;
         }}
         .predecessor-highlight {{
-            background-color: lightgreen;
+            background-color: #66b3ff; /* Light Blue */
             color: black;
         }}
         .successor-highlight {{
-            background-color: lightblue;
+            background-color: #66ff66; /* Light Green */
             color: black;
         }}
         .unmatched-highlight {{
-            background-color: grey;
-            color: black;
+            background-color: #b0b0b0;
+            color: #0e0e0e;
         }}
         /* Graph section */
         #graph-section {{
             padding: 10px;
-            background-color: #0e0e0e;
             box-sizing: border-box;
+            background-color: #0e0e0e;
         }}
         #graph {{
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            gap: 10px; /* Increase spacing between node groups */
+        }}
+        .node-group {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }}
+        .node-group-title {{
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: white;
+        }}
+        .node-container {{
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 40px; /* Increase spacing between nodes */
             flex-wrap: wrap;
-            gap: 10px;
+            justify-content: center;
         }}
         .node {{
             padding: 10px;
-            background-color: #444;
+            background-color: #1a1a1a;
             color: white;
             border-radius: 5px;
             text-align: center;
-            max-width: 200px;
-            /* Removed hover effects */
+            max-width: 300px;
             cursor: default;
         }}
         .edge {{
-            margin: 0 5px;
             color: white;
             font-size: 24px;
+            margin: 5px 0;
         }}
         .predecessor-node {{
-            background-color: lightgreen;
+            background-color: #66b3ff; /* Light Blue */
             color: black;
         }}
         .successor-node {{
-            background-color: lightblue;
+            background-color: #66ff66; /* Light Green */
             color: black;
         }}
         .selected-node {{
-            background-color: yellow;
+            background-color: #ffff66; /* Yellow */
             color: black;
         }}
     </style>
@@ -341,15 +365,14 @@ def main():
     }}
 
     function highlightSentence(sentence) {{
-        sentences.forEach(s => s.classList.remove('highlight', 'unmatched-highlight'));
-        const isMatched = sentence.classList.contains('matched');
+        // Remove all possible highlights
+        sentences.forEach(s => s.classList.remove('highlight', 'unmatched-highlight', 'predecessor-highlight', 'successor-highlight'));
+        const isMatched = sentence.dataset.matched === 'yes';
         if (isMatched) {{
             sentence.classList.add('highlight');
         }} else {{
             sentence.classList.add('unmatched-highlight');
         }}
-        // Remove other highlights from the selected sentence
-        sentence.classList.remove('predecessor-highlight', 'successor-highlight');
     }}
 
     function highlightCausalSentences(predecessorIds, successorIds) {{
@@ -381,50 +404,92 @@ def main():
         // Clear the graph container
         graphContainer.innerHTML = '';
 
-        // Create elements for predecessors, selected node, and successors
-        const elements = [];
+        // Main Container
+        const mainContainer = document.createElement('div');
+        mainContainer.style.display = 'flex';
+        mainContainer.style.flexDirection = 'column';
+        mainContainer.style.alignItems = 'center';
 
-        // Predecessors
-        predecessors.forEach(nodeId => {{
-            const nodeText = nodes[nodeId];
-            const nodeElement = document.createElement('div');
-            nodeElement.classList.add('node', 'predecessor-node');
-            nodeElement.textContent = nodeText;
-            elements.push(nodeElement);
+        // Predecessors Group
+        if (predecessors.length > 0) {{
+            const predecessorsGroup = document.createElement('div');
+            predecessorsGroup.classList.add('node-group');
 
-            // Add arrow
+            const title = document.createElement('div');
+            title.classList.add('node-group-title');
+            title.textContent = 'Predecessors';
+            predecessorsGroup.appendChild(title);
+
+            const nodeContainer = document.createElement('div');
+            nodeContainer.classList.add('node-container');
+
+            predecessors.forEach(nodeId => {{
+                const nodeElement = document.createElement('div');
+                nodeElement.classList.add('node', 'predecessor-node');
+                const nodeText = nodes[nodeId];
+                nodeElement.textContent = nodeText;
+                nodeContainer.appendChild(nodeElement);
+            }});
+
+            predecessorsGroup.appendChild(nodeContainer);
+            mainContainer.appendChild(predecessorsGroup);
+
+            // Arrow pointing down to selected node
             const arrowElement = document.createElement('div');
             arrowElement.classList.add('edge');
-            arrowElement.textContent = '→';
-            elements.push(arrowElement);
-        }});
+            arrowElement.textContent = '↓';
+            mainContainer.appendChild(arrowElement);
+        }}
 
-        // Selected Node
-        const selectedNodeText = nodes[selectedNodeId];
+        // Current Node Group
+        const currentNodeGroup = document.createElement('div');
+        currentNodeGroup.classList.add('node-group');
+
+        const currentTitle = document.createElement('div');
+        currentTitle.classList.add('node-group-title');
+        currentTitle.textContent = 'Current Event';
+        currentNodeGroup.appendChild(currentTitle);
+
         const selectedNodeElement = document.createElement('div');
         selectedNodeElement.classList.add('node', 'selected-node');
+        const selectedNodeText = nodes[selectedNodeId];
         selectedNodeElement.textContent = selectedNodeText;
-        elements.push(selectedNodeElement);
+        currentNodeGroup.appendChild(selectedNodeElement);
 
-        // Successors
-        successors.forEach(nodeId => {{
-            // Add arrow
+        mainContainer.appendChild(currentNodeGroup);
+
+        // Successors Group
+        if (successors.length > 0) {{
+            // Arrow pointing down to successors
             const arrowElement = document.createElement('div');
             arrowElement.classList.add('edge');
-            arrowElement.textContent = '→';
-            elements.push(arrowElement);
+            arrowElement.textContent = '↓';
+            mainContainer.appendChild(arrowElement);
 
-            const nodeText = nodes[nodeId];
-            const nodeElement = document.createElement('div');
-            nodeElement.classList.add('node', 'successor-node');
-            nodeElement.textContent = nodeText;
-            elements.push(nodeElement);
-        }});
+            const successorsGroup = document.createElement('div');
+            successorsGroup.classList.add('node-group');
 
-        // Append elements to the graph container
-        elements.forEach(el => {{
-            graphContainer.appendChild(el);
-        }});
+            const title = document.createElement('div');
+            title.classList.add('node-group-title');
+            title.textContent = 'Successors';
+            successorsGroup.appendChild(title);
+
+            const nodeContainer = document.createElement('div');
+            nodeContainer.classList.add('node-container');
+
+            successors.forEach(nodeId => {{
+                const nodeElement = document.createElement('div');
+                nodeElement.classList.add('node', 'successor-node');
+                const nodeText = nodes[nodeId];
+                nodeElement.textContent = nodeText;
+                nodeContainer.appendChild(nodeElement);
+            }});
+
+            successorsGroup.appendChild(nodeContainer);
+            mainContainer.appendChild(successorsGroup);
+        }}
+
+        graphContainer.appendChild(mainContainer);
     }}
 
     sentences.forEach(sentence => {{
@@ -441,10 +506,18 @@ def main():
             }}
 
             if (useCausalRelations && causalEdges.length > 0) {{
-                const predecessors = getDirectPredecessors(nodeId, causalEdges);
-                const successors = getDirectSuccessors(nodeId, causalEdges);
-                highlightCausalSentences(predecessors, successors);
-                updateGraph(nodeId, predecessors, successors);
+                const isMatched = sentence.dataset.matched === 'yes';
+                if (isMatched) {{
+                    const predecessors = getDirectPredecessors(nodeId, causalEdges);
+                    const successors = getDirectSuccessors(nodeId, causalEdges);
+                    highlightCausalSentences(predecessors, successors);
+                    updateGraph(nodeId, predecessors, successors);
+                }} else {{
+                    clearCausalHighlights();
+                    if (graphContainer) {{
+                        graphContainer.innerHTML = '';  // Clear the graph if causal relations are not enabled
+                    }}
+                }}
             }} else {{
                 clearCausalHighlights();
                 if (graphContainer) {{
@@ -456,6 +529,7 @@ def main():
 
     video.addEventListener('timeupdate', () => {{
         const currentTime = video.currentTime;
+        let matchedFound = false;  // Flag to check if any sentence matches the current time
 
         sentences.forEach(sentence => {{
             const startAttr = sentence.getAttribute('data-start');
@@ -464,15 +538,24 @@ def main():
             const end = endAttr ? parseFloat(endAttr) : null;
             if (start !== null && end !== null && !isNaN(start) && !isNaN(end)) {{
                 if (currentTime >= start && currentTime <= end) {{
+                    matchedFound = true;
                     highlightSentence(sentence);
 
                     const nodeId = parseInt(sentence.getAttribute('data-node'), 10);
 
                     if (useCausalRelations && causalEdges.length > 0) {{
-                        const predecessors = getDirectPredecessors(nodeId, causalEdges);
-                        const successors = getDirectSuccessors(nodeId, causalEdges);
-                        highlightCausalSentences(predecessors, successors);
-                        updateGraph(nodeId, predecessors, successors);
+                        const isMatched = sentence.dataset.matched === 'yes';
+                        if (isMatched) {{
+                            const predecessors = getDirectPredecessors(nodeId, causalEdges);
+                            const successors = getDirectSuccessors(nodeId, causalEdges);
+                            highlightCausalSentences(predecessors, successors);
+                            updateGraph(nodeId, predecessors, successors);
+                        }} else {{
+                            clearCausalHighlights();
+                            if (graphContainer) {{
+                                graphContainer.innerHTML = '';  // Clear the graph if causal relations are not enabled
+                            }}
+                        }}
                     }} else {{
                         clearCausalHighlights();
                         if (graphContainer) {{
@@ -482,13 +565,24 @@ def main():
                 }}
             }}
         }});
+
+        if (!matchedFound) {{
+            // Clear all highlights and causal graph if no sentence matches the current time
+            sentences.forEach(sentence => {{
+                sentence.classList.remove('highlight', 'unmatched-highlight', 'predecessor-highlight', 'successor-highlight');
+            }});
+            clearCausalHighlights();
+            if (graphContainer) {{
+                graphContainer.innerHTML = '';
+            }}
+        }}
     }});
     </script>
     '''
 
     # Adjust the height based on whether causal relations are enabled
     if use_causal_relations:
-        component_height = 900  # Increase height to accommodate the graph
+        component_height = 1300  # Adjusted height to accommodate the graph
     else:
         component_height = 620  # Reduce height when the graph is not displayed
 
@@ -509,3 +603,4 @@ if __name__ == '__main__':
         main()
     except Exception as e:
         st.error(f"An error occurred: {e}")
+
