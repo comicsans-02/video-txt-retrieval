@@ -594,7 +594,7 @@ def main():
     '''
 
     if use_causal_relations:
-        component_height = 1200  
+        component_height = 1250  
     else:
         component_height = 620  
 
