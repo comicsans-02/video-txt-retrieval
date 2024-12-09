@@ -615,26 +615,28 @@ def main():
     st.markdown("""
     ### References
     ```bibtex
-    @misc{sun2024eventcausalitykeycomputational,
-          title={Event Causality Is Key to Computational Story Understanding}, 
-          author={Yidan Sun and Qin Chao and Boyang Li},
+    @inproceedings{Sun2023EventCI,
+          title={Event Causality Is Key to Computational Story Understanding},
+          author={Yidan Sun and Qin Chao and Boyang Albert Li},
+          booktitle={The Annual Conference of the North American Chapter of the Association for Computational Linguistics},
           year={2024},
-          eprint={2311.09648},
-          archivePrefix={arXiv},
-          primaryClass={cs.CL},
-          url={https://arxiv.org/abs/2311.09648}, 
+          url={https://arxiv.org/abs/2311.09648}
     }
     ```
 
     ```bibtex
-    @misc{sun2024multilingualsynopsesmovienarratives,
-          title={Multilingual Synopses of Movie Narratives: A Dataset for Vision-Language Story Understanding}, 
-          author={Yidan Sun and Jianfei Yu and Boyang Li},
-          year={2024},
-          eprint={2406.13092},
-          archivePrefix={arXiv},
-          primaryClass={cs.CL},
-          url={https://arxiv.org/abs/2406.13092}, 
+    @inproceedings{sun-etal-2024-multilingual,
+            title = "Multilingual Synopses of Movie Narratives: A Dataset for Vision-Language Story Understanding",
+            author = "Sun, Yidan  and Yu, Jianfei  and Li, Boyang",
+            editor = "Al-Onaizan, Yaser  and Bansal, Mohit  and Chen, Yun-Nung",
+            booktitle = "Findings of the Association for Computational Linguistics: EMNLP 2024",
+            month = nov,
+            year = "2024",
+            address = "Miami, Florida, USA",
+            publisher = "Association for Computational Linguistics",
+            url = "https://aclanthology.org/2024.findings-emnlp.788",
+            doi = "10.18653/v1/2024.findings-emnlp.788",
+            pages = "13488--13504"
     }
     ```
     """)
